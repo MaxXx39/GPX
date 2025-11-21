@@ -31,11 +31,11 @@
         .instruction-panel {
             background-color: #1b8d52; color: white; width: 95%; max-width: 500px;
             padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            margin-top: 10px; display: flex; align-items: center; min-height: 70px; pointer-events: auto;
+            margin-top: 10px; display: flex; align-items: center; min-height: 80px; pointer-events: auto;
         }
 
-        .direction-icon { font-size: 2.2rem; margin-right: 15px; width: 50px; text-align: center; }
-        .instruction-text { font-size: 1.3rem; font-weight: bold; line-height: 1.2; }
+        .direction-icon { font-size: 2.5rem; margin-right: 15px; width: 50px; text-align: center; }
+        .instruction-text { font-size: 1.2rem; font-weight: bold; line-height: 1.3; }
 
         /* Info Distance */
         .info-panel {
@@ -75,10 +75,6 @@
             border: 1px solid #ccc; background: #fff; color: #333; outline: none; box-sizing: border-box;
         }
         
-        .file-upload-btn {
-            border: 2px dashed #ccc; padding: 10px; text-align: center; cursor: pointer; margin-top: 5px; font-size: 0.8rem; color: #555;
-        }
-
         /* Overlay de Démarrage */
         #start-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -183,10 +179,8 @@
         let lastRouteFetchTime = 0;
         let realDrivingDistanceText = "-- km"; 
         let currentMarker = null; 
-        
-        // Variables Mode GPX
         let isGPXMode = false;
-        let gpxRouteGeoJSON = null; // Stocke la géométrie complète du GPX
+        let gpxRouteGeoJSON = null; 
 
         // --- 1. Initialisation ---
         window.onload = function() {
@@ -198,10 +192,9 @@
                 select.appendChild(option);
             }
 
-            // Gestion changement destination (Mode Auto)
             select.addEventListener('change', (e) => {
-                isGPXMode = false; // On quitte le mode GPX
-                document.getElementById('gpx-input').value = ""; // Reset input
+                isGPXMode = false; 
+                document.getElementById('gpx-input').value = "";
                 
                 const newDestKey = e.target.value;
                 currentDestination = DESTINATIONS[newDestKey].coords;
@@ -209,9 +202,7 @@
                 toggleMenu();
             });
 
-            // Gestion import GPX
             document.getElementById('gpx-input').addEventListener('change', handleGPXUpload);
-
             checkGPS();
         };
 
@@ -226,14 +217,13 @@
                 
                 if(userPos) {
                     if(!isGPXMode) {
-                        getRoute(userPos); // Appel API Mapbox
+                        getRoute(userPos); 
                     }
                     updateAppLogic(userPos, 0);
                 }
             }
         }
 
-        // --- Parser GPX Simple ---
         function handleGPXUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -258,17 +248,13 @@
                         coordinates.push([lon, lat]);
                     }
 
-                    // Activation Mode GPX
                     isGPXMode = true;
                     gpxRouteGeoJSON = { type: 'LineString', coordinates: coordinates };
-                    
-                    // La destination devient le dernier point du GPX
                     currentDestination = coordinates[coordinates.length - 1];
 
                     alert("✅ GPX chargé ! Suivez la ligne bleue.");
                     toggleMenu();
                     
-                    // UI Update
                     document.getElementById('nav-text').innerText = "Suivez la trace GPX";
                     document.getElementById('nav-icon').innerHTML = '<i class="fas fa-route"></i>';
                     
@@ -331,10 +317,12 @@
                 container: 'map',
                 style: 'mapbox://styles/mapbox/navigation-night-v1', 
                 center: userPos,
-                zoom: 17, // Zoom plus proche pour guidage (17 vs 15 avant)
+                zoom: 16,
                 pitch: 60,
                 bearing: 0,
-                interactive: false 
+                interactive: true, // CORRECTION 1: Permettre à l'utilisateur de zoomer/bouger
+                touchZoomRotate: true,
+                dragPan: true
             });
 
             geolocateControl = new mapboxgl.GeolocateControl({
@@ -369,11 +357,14 @@
                     const newUserPos = [e.coords.longitude, e.coords.latitude];
                     const heading = e.coords.heading || 0;
                     
-                    // CORRECTION 1: Forcer le verrouillage de la caméra sur l'utilisateur
+                    // CORRECTION 1 (Suite) : On utilise le zoom actuel de l'utilisateur au lieu de forcer 17
+                    const currentZoom = map.getZoom();
+                    
+                    // On centre toujours, mais on garde le zoom choisi par l'utilisateur
                     map.jumpTo({
                         center: newUserPos,
                         bearing: heading,
-                        zoom: 17,
+                        zoom: currentZoom, 
                         pitch: 60
                     });
 
@@ -389,7 +380,6 @@
             const to = turf.point(currentDestination);
             const directDistance = turf.distance(from, to, { units: 'kilometers' });
             
-            // Affichage distance
             if(isGPXMode) {
                 document.getElementById('distance-display').innerText = "Vol d'oiseau : " + directDistance.toFixed(1) + " km";
             } else {
@@ -404,14 +394,12 @@
                 }
             }
 
-            // Logique Route
             if (isGPXMode && gpxRouteGeoJSON) {
                 const visibleRouteGeo = isRevealed ? gpxRouteGeoJSON : clipRouteByDistance(gpxRouteGeoJSON, userPos, VISIBILITY_RADIUS_KM);
                 map.getSource('route').setData({
                     type: 'Feature', properties: {}, geometry: visibleRouteGeo
                 });
             } else {
-                // Mode Auto classique
                 const now = Date.now();
                 if (now - lastRouteFetchTime > 2000) {
                     lastRouteFetchTime = now;
@@ -427,7 +415,7 @@
         }
 
         async function getRoute(start) {
-            if(isGPXMode) return; // Sécurité
+            if(isGPXMode) return; 
 
             const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${start[0]},${start[1]};${currentDestination[0]},${currentDestination[1]}?steps=true&geometries=geojson&overview=full&access_token=${mapboxgl.accessToken}&language=fr`;
             
@@ -438,17 +426,16 @@
                 if (json.routes && json.routes.length > 0) {
                     const data = json.routes[0];
                     
+                    // Mise à jour distance globale
                     const distMeters = data.distance;
                     if (distMeters >= 1000) {
                         realDrivingDistanceText = (distMeters / 1000).toFixed(1) + " km";
                     } else {
                         realDrivingDistanceText = Math.floor(distMeters) + " m";
                     }
-                    
-                    if(!isGPXMode) {
-                        document.getElementById('distance-display').innerText = realDrivingDistanceText;
-                    }
+                    document.getElementById('distance-display').innerText = realDrivingDistanceText;
 
+                    // Mise à jour géométrie (tracé)
                     const fullRouteGeo = data.geometry;
                     const visibleRouteGeo = isRevealed ? fullRouteGeo : clipRouteByDistance(fullRouteGeo, start, VISIBILITY_RADIUS_KM);
                     
@@ -456,21 +443,29 @@
                         type: 'Feature', properties: {}, geometry: visibleRouteGeo
                     });
 
-                    if (data.legs && data.legs[0].steps.length > 0) {
-                        const step = data.legs[0].steps[0];
-                        let instruction = step.maneuver.instruction;
-                        let type = step.maneuver.type; 
-                        let modifier = step.maneuver.modifier;
-
-                        // CORRECTION 2: Anticipation augmentée à 80m (au lieu de 30m) pour les intersections
-                        if (step.distance < 80 && data.legs[0].steps[1]) {
-                            instruction = data.legs[0].steps[1].maneuver.instruction;
-                            type = data.legs[0].steps[1].maneuver.type;
-                            modifier = data.legs[0].steps[1].maneuver.modifier;
-                        }
+                    // CORRECTION 2: Nouvelle logique d'instructions plus claire (Anticipation)
+                    if (data.legs && data.legs[0].steps.length > 1) {
+                        // On regarde l'étape actuelle ET la suivante
+                        const currentStep = data.legs[0].steps[0];
+                        const nextStep = data.legs[0].steps[1];
                         
-                        document.getElementById('nav-text').innerText = instruction;
+                        const distToNextAction = currentStep.distance; // Distance avant de devoir tourner
+                        let distText = "";
+                        if(distToNextAction >= 1000) distText = (distToNextAction/1000).toFixed(1) + " km";
+                        else distText = Math.floor(distToNextAction) + " m";
+
+                        // L'instruction affichée est celle de l'action à venir (NextStep)
+                        const instruction = nextStep.maneuver.instruction;
+                        const type = nextStep.maneuver.type;
+                        const modifier = nextStep.maneuver.modifier;
+
+                        // Formatage : "Dans 300m : Tournez à droite"
+                        document.getElementById('nav-text').innerHTML = `<span style="font-size:0.8em; font-weight:normal; opacity:0.9">Dans ${distText} :</span><br>${instruction}`;
                         updateIcon(type, modifier);
+                    } else if (data.legs && data.legs[0].steps.length === 1) {
+                        // Fin du parcours
+                        document.getElementById('nav-text').innerText = "Arrivée proche...";
+                        updateIcon('arrive', null);
                     }
                 }
             } catch (err) { console.error(err); }
@@ -521,5 +516,3 @@
     </script>
 </body>
 </html>
-
-
