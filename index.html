@@ -320,7 +320,7 @@
                 zoom: 16,
                 pitch: 60,
                 bearing: 0,
-                interactive: true, // CORRECTION 1: Permettre à l'utilisateur de zoomer/bouger
+                interactive: true, 
                 touchZoomRotate: true,
                 dragPan: true
             });
@@ -355,12 +355,18 @@
 
                 geolocateControl.on('geolocate', (e) => {
                     const newUserPos = [e.coords.longitude, e.coords.latitude];
-                    const heading = e.coords.heading || 0;
                     
-                    // CORRECTION 1 (Suite) : On utilise le zoom actuel de l'utilisateur au lieu de forcer 17
+                    // Gestion robuste du cap (Heading)
+                    // Si le téléphone ne renvoie pas de cap (ex: statique), on garde l'orientation actuelle
+                    let heading = e.coords.heading;
+                    if (heading === null || heading === undefined || isNaN(heading)) {
+                        heading = map.getBearing(); 
+                    }
+                    
+                    // On utilise le zoom actuel de l'utilisateur pour ne pas le gêner
                     const currentZoom = map.getZoom();
                     
-                    // On centre toujours, mais on garde le zoom choisi par l'utilisateur
+                    // Force le centrage et l'orientation
                     map.jumpTo({
                         center: newUserPos,
                         bearing: heading,
@@ -443,27 +449,23 @@
                         type: 'Feature', properties: {}, geometry: visibleRouteGeo
                     });
 
-                    // CORRECTION 2: Nouvelle logique d'instructions plus claire (Anticipation)
+                    // Instructions
                     if (data.legs && data.legs[0].steps.length > 1) {
-                        // On regarde l'étape actuelle ET la suivante
                         const currentStep = data.legs[0].steps[0];
                         const nextStep = data.legs[0].steps[1];
                         
-                        const distToNextAction = currentStep.distance; // Distance avant de devoir tourner
+                        const distToNextAction = currentStep.distance; 
                         let distText = "";
                         if(distToNextAction >= 1000) distText = (distToNextAction/1000).toFixed(1) + " km";
                         else distText = Math.floor(distToNextAction) + " m";
 
-                        // L'instruction affichée est celle de l'action à venir (NextStep)
                         const instruction = nextStep.maneuver.instruction;
                         const type = nextStep.maneuver.type;
                         const modifier = nextStep.maneuver.modifier;
 
-                        // Formatage : "Dans 300m : Tournez à droite"
                         document.getElementById('nav-text').innerHTML = `<span style="font-size:0.8em; font-weight:normal; opacity:0.9">Dans ${distText} :</span><br>${instruction}`;
                         updateIcon(type, modifier);
                     } else if (data.legs && data.legs[0].steps.length === 1) {
-                        // Fin du parcours
                         document.getElementById('nav-text').innerText = "Arrivée proche...";
                         updateIcon('arrive', null);
                     }
