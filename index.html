@@ -331,7 +331,7 @@
                 container: 'map',
                 style: 'mapbox://styles/mapbox/navigation-night-v1', 
                 center: userPos,
-                zoom: 15,
+                zoom: 17, // Zoom plus proche pour guidage (17 vs 15 avant)
                 pitch: 60,
                 bearing: 0,
                 interactive: false 
@@ -367,8 +367,17 @@
 
                 geolocateControl.on('geolocate', (e) => {
                     const newUserPos = [e.coords.longitude, e.coords.latitude];
-                    map.easeTo({ pitch: 60 }); 
-                    updateAppLogic(newUserPos, e.coords.heading);
+                    const heading = e.coords.heading || 0;
+                    
+                    // CORRECTION 1: Forcer le verrouillage de la caméra sur l'utilisateur
+                    map.jumpTo({
+                        center: newUserPos,
+                        bearing: heading,
+                        zoom: 17,
+                        pitch: 60
+                    });
+
+                    updateAppLogic(newUserPos, heading);
                 });
             });
         }
@@ -376,16 +385,12 @@
         async function updateAppLogic(currentPos, heading) {
             userPos = currentPos;
 
-            // Logique Distance
-            // Si GPX, on calcule la distance le long de la ligne (complexe en JS pur sans library lourde)
-            // Donc on reste sur la distance vol d'oiseau vers le dernier point pour l'instant, ou la distance API si pas GPX
             const from = turf.point(userPos);
             const to = turf.point(currentDestination);
             const directDistance = turf.distance(from, to, { units: 'kilometers' });
             
             // Affichage distance
             if(isGPXMode) {
-                // En mode GPX, on affiche la distance vol d'oiseau vers la fin
                 document.getElementById('distance-display').innerText = "Vol d'oiseau : " + directDistance.toFixed(1) + " km";
             } else {
                 const displayDist = realDrivingDistanceText !== "-- km" ? realDrivingDistanceText : (directDistance.toFixed(1) + " km");
@@ -401,7 +406,6 @@
 
             // Logique Route
             if (isGPXMode && gpxRouteGeoJSON) {
-                // En mode GPX, on n'appelle PAS l'API, on coupe juste notre GPX local
                 const visibleRouteGeo = isRevealed ? gpxRouteGeoJSON : clipRouteByDistance(gpxRouteGeoJSON, userPos, VISIBILITY_RADIUS_KM);
                 map.getSource('route').setData({
                     type: 'Feature', properties: {}, geometry: visibleRouteGeo
@@ -458,7 +462,8 @@
                         let type = step.maneuver.type; 
                         let modifier = step.maneuver.modifier;
 
-                        if (step.distance < 30 && data.legs[0].steps[1]) {
+                        // CORRECTION 2: Anticipation augmentée à 80m (au lieu de 30m) pour les intersections
+                        if (step.distance < 80 && data.legs[0].steps[1]) {
                             instruction = data.legs[0].steps[1].maneuver.instruction;
                             type = data.legs[0].steps[1].maneuver.type;
                             modifier = data.legs[0].steps[1].maneuver.modifier;
@@ -476,15 +481,10 @@
             const visibleCoords = [];
             const userPoint = turf.point(userPos);
             
-            // Optimisation : On cherche le point du GPX le plus proche de l'utilisateur pour commencer le tracé là (optionnel mais mieux)
-            // Pour cette version simple, on affiche tout ce qui est dans le rayon de 2km
-            
             for (let i = 0; i < coords.length; i++) {
                 if (turf.distance(userPoint, turf.point(coords[i]), { units: 'kilometers' }) <= maxDistKm) {
                     visibleCoords.push(coords[i]);
                 } else { 
-                    // Astuce : Si on a déjà commencé à dessiner et qu'on sort du rayon, on arrête (fin du brouillard)
-                    // Mais si on a pas encore commencé (points derrière nous trop loin), on continue de chercher
                     if(visibleCoords.length > 0) break; 
                 }
             }
@@ -521,3 +521,5 @@
     </script>
 </body>
 </html>
+
+
